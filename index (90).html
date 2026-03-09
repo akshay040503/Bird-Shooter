@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bird Shooter — Hand Tracking Game</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rubik:wght@300;400;600&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --sky: #0a1628;
+      --horizon: #1a3a5c;
+      --gold: #f5a623;
+      --red: #e8352a;
+      --green: #2ecc71;
+      --white: #f0ede6;
+    }
+
+    body {
+      background: var(--sky);
+      font-family: 'Rubik', sans-serif;
+      color: var(--white);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #game-wrapper {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Sky gradient background */
+    #game-wrapper::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, #0a1628 0%, #1a3a5c 60%, #2d6a8a 100%);
+      z-index: 0;
+    }
+
+    /* Stars */
+    #stars {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    #game-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+    }
+
+    #camera-feed {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      width: 200px;
+      height: 150px;
+      border-radius: 12px;
+      border: 2px solid rgba(245,166,35,0.5);
+      object-fit: cover;
+      z-index: 10;
+      transform: scaleX(-1);
+      opacity: 0.85;
+    }
+
+    #hud {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 20px 28px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .hud-box {
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(245,166,35,0.3);
+      border-radius: 10px;
+      padding: 10px 20px;
+      text-align: center;
+      backdrop-filter: blur(6px);
+    }
+
+    .hud-label {
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 2px;
+    }
+
+    .hud-value {
+      font-family: 'Bebas Neue', cursive;
+      font-size: 36px;
+      color: var(--white);
+      line-height: 1;
+    }
+
+    #lives-display {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+      justify-content: center;
+    }
+
+    .heart {
+      font-size: 18px;
+      transition: opacity 0.3s;
+    }
+    .heart.lost { opacity: 0.2; }
+
+    /* Overlay screens */
+    .screen {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(5, 10, 20, 0.88);
+      backdrop-filter: blur(10px);
+    }
+
+    .screen h1 {
+      font-family: 'Bebas Neue', cursive;
+      font-size: clamp(48px, 10vw, 100px);
+      color: var(--gold);
+      letter-spacing: 4px;
+      text-shadow: 0 0 40px rgba(245,166,35,0.5);
+      margin-bottom: 10px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { text-shadow: 0 0 40px rgba(245,166,35,0.5); }
+      50% { text-shadow: 0 0 80px rgba(245,166,35,0.9); }
+    }
+
+    .screen p {
+      font-size: 16px;
+      color: #aaa;
+      margin-bottom: 8px;
+      max-width: 480px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .screen .big-score {
+      font-family: 'Bebas Neue', cursive;
+      font-size: 72px;
+      color: var(--white);
+      margin: 10px 0;
+    }
+
+    .btn {
+      margin-top: 28px;
+      padding: 16px 48px;
+      background: var(--gold);
+      color: #0a1628;
+      border: none;
+      border-radius: 8px;
+      font-family: 'Bebas Neue', cursive;
+      font-size: 24px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 4px 20px rgba(245,166,35,0.4);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(245,166,35,0.6);
+    }
+
+    .instruction-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 20px 0;
+      max-width: 420px;
+    }
+
+    .instruction-item {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #ccc;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .instruction-item span:first-child {
+      font-size: 22px;
+    }
+
+    #loading-bar-wrap {
+      width: 280px;
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      margin-top: 20px;
+      overflow: hidden;
+    }
+
+    #loading-bar {
+      height: 100%;
+      background: var(--gold);
+      border-radius: 4px;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    #status-msg {
+      font-size: 12px;
+      color: #888;
+      margin-top: 8px;
+      letter-spacing: 1px;
+    }
+
+    #combo-display {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Bebas Neue', cursive;
+      font-size: 60px;
+      color: var(--gold);
+      pointer-events: none;
+      z-index: 15;
+      opacity: 0;
+      transition: opacity 0.3s;
+      text-shadow: 0 0 30px rgba(245,166,35,0.8);
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+  <canvas id="stars"></canvas>
+  <canvas id="game-canvas"></canvas>
+  <video id="camera-feed" autoplay playsinline muted></video>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-box">
+      <div class="hud-label">Score</div>
+      <div class="hud-value" id="score-display">0</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">Level</div>
+      <div class="hud-value" id="level-display">1</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">Lives</div>
+      <div id="lives-display">
+        <span class="heart" id="h1">🐦</span>
+        <span class="heart" id="h2">🐦</span>
+        <span class="heart" id="h3">🐦</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="combo-display"></div>
+
+  <!-- Start Screen -->
+  <div class="screen" id="start-screen">
+    <h1>Bird Shooter</h1>
+    <p>Use your hand in front of the camera.<br/>Point your finger to aim — <strong style="color:var(--gold)">pinch to shoot!</strong></p>
+    <div class="instruction-grid">
+      <div class="instruction-item"><span>👆</span><span>Move finger to aim</span></div>
+      <div class="instruction-item"><span>🤏</span><span>Pinch to shoot</span></div>
+      <div class="instruction-item"><span>🐦</span><span>Hit birds for points</span></div>
+      <div class="instruction-item"><span>⚡</span><span>Combos = bonus!</span></div>
+    </div>
+    <div id="loading-bar-wrap"><div id="loading-bar"></div></div>
+    <div id="status-msg">Loading hand tracking…</div>
+    <button class="btn" id="start-btn" style="display:none" onclick="startGame()">Start Game</button>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div class="screen" id="gameover-screen" style="display:none">
+    <h1>Game Over</h1>
+    <p>Your final score</p>
+    <div class="big-score" id="final-score">0</div>
+    <p id="final-level-msg" style="color: var(--gold); font-size:14px;"></p>
+    <button class="btn" onclick="restartGame()">Play Again</button>
+  </div>
+</div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ─── Stars ───────────────────────────────────────────────────────────────────
+const starCanvas = document.getElementById('stars');
+const sCtx = starCanvas.getContext('2d');
+let stars = [];
+function initStars() {
+  starCanvas.width = window.innerWidth;
+  starCanvas.height = window.innerHeight;
+  stars = Array.from({length: 120}, () => ({
+    x: Math.random() * starCanvas.width,
+    y: Math.random() * starCanvas.height * 0.6,
+    r: Math.random() * 1.5 + 0.3,
+    alpha: Math.random()
+  }));
+}
+function drawStars() {
+  sCtx.clearRect(0,0,starCanvas.width,starCanvas.height);
+  stars.forEach(s => {
+    s.alpha += (Math.random()-0.5)*0.02;
+    s.alpha = Math.max(0.1, Math.min(1, s.alpha));
+    sCtx.beginPath();
+    sCtx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+    sCtx.fillStyle = `rgba(240,237,230,${s.alpha})`;
+    sCtx.fill();
+  });
+}
+initStars();
+
+// ─── Game Canvas ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', () => { resizeCanvas(); initStars(); });
+
+// ─── Game State ───────────────────────────────────────────────────────────────
+let score = 0, lives = 3, level = 1, gameActive = false;
+let birds = [], particles = [], shots = [];
+let handX = -100, handY = -100, isPinching = false, wasPinching = false;
+let combo = 0, comboTimer = 0;
+let lastShootTime = 0;
+const SHOOT_COOLDOWN = 400;
+
+// ─── Bird class ───────────────────────────────────────────────────────────────
+class Bird {
+  constructor() { this.reset(); }
+  reset() {
+    const fromLeft = Math.random() > 0.5;
+    this.w = 44 + Math.random() * 20;
+    this.h = this.w * 0.55;
+    this.y = 60 + Math.random() * (canvas.height * 0.55);
+    this.speed = (2 + Math.random() * 2 + level * 0.4) * (fromLeft ? 1 : -1);
+    this.x = fromLeft ? -this.w - 10 : canvas.width + this.w + 10;
+    this.wingUp = true;
+    this.wingTimer = 0;
+    this.wingSpeed = 0.08 + Math.random() * 0.07;
+    this.color = ['#e8352a','#f5a623','#2ecc71','#3498db','#9b59b6'][Math.floor(Math.random()*5)];
+    this.alive = true;
+    this.hitAnim = 0;
+    this.score = Math.round(10 + (canvas.height - this.y) / 20);
+  }
+  update() {
+    this.x += this.speed;
+    this.wingTimer += this.wingSpeed;
+    this.wingUp = Math.sin(this.wingTimer) > 0;
+    if (this.x > canvas.width + 80 || this.x < -80) {
+      lives = Math.max(0, lives - 1);
+      updateHUD();
+      if (lives <= 0) endGame();
+      this.reset();
+    }
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    if (this.speed < 0) ctx.scale(-1, 1);
+
+    if (this.hitAnim > 0) {
+      ctx.globalAlpha = this.hitAnim / 10;
+      this.hitAnim--;
+    }
+
+    const bw = this.w, bh = this.h;
+    // Body
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, bw/2, bh/2, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Wing
+    ctx.fillStyle = this.wingUp ? '#fff' : 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    if (this.wingUp) {
+      ctx.ellipse(-4, -bh*0.6, bw*0.38, bh*0.25, -0.3, 0, Math.PI*2);
+    } else {
+      ctx.ellipse(-4, bh*0.2, bw*0.38, bh*0.2, 0.2, 0, Math.PI*2);
+    }
+    ctx.fill();
+    // Head
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(bw*0.38, -bh*0.1, bh*0.32, 0, Math.PI*2);
+    ctx.fill();
+    // Eye
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(bw*0.44, -bh*0.18, 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(bw*0.46, -bh*0.18, 2.5, 0, Math.PI*2);
+    ctx.fill();
+    // Beak
+    ctx.fillStyle = '#f5a623';
+    ctx.beginPath();
+    ctx.moveTo(bw*0.58, -bh*0.05);
+    ctx.lineTo(bw*0.75, -bh*0.08);
+    ctx.lineTo(bw*0.58, bh*0.04);
+    ctx.fill();
+    // Tail
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(-bw*0.45, 0);
+    ctx.lineTo(-bw*0.72, -bh*0.3);
+    ctx.lineTo(-bw*0.72, bh*0.3);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+// ─── Particle class ──────────────────────────────────────────────────────────
+class Particle {
+  constructor(x, y, color) {
+    this.x = x; this.y = y;
+    this.vx = (Math.random()-0.5) * 8;
+    this.vy = (Math.random()-0.5) * 8 - 2;
+    this.alpha = 1;
+    this.r = Math.random() * 8 + 3;
+    this.color = color;
+    this.gravity = 0.18;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += this.gravity;
+    this.alpha -= 0.03;
+  }
+  draw() {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.alpha);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─── Shot class ───────────────────────────────────────────────────────────────
+class Shot {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.r = 12; this.alpha = 1;
+    this.expanding = true;
+  }
+  update() {
+    if (this.expanding) { this.r += 3; if(this.r > 30) this.expanding = false; }
+    else { this.alpha -= 0.08; }
+  }
+  draw() {
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    ctx.strokeStyle = '#f5a623';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─── Spawn birds ──────────────────────────────────────────────────────────────
+function spawnBirds() {
+  const count = 3 + level;
+  birds = Array.from({length: count}, () => new Bird());
+}
+
+// ─── HUD update ───────────────────────────────────────────────────────────────
+function updateHUD() {
+  document.getElementById('score-display').textContent = score;
+  document.getElementById('level-display').textContent = level;
+  ['h1','h2','h3'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('lost', i >= lives);
+  });
+}
+
+// ─── Shoot ────────────────────────────────────────────────────────────────────
+function shoot(sx, sy) {
+  const now = Date.now();
+  if (now - lastShootTime < SHOOT_COOLDOWN) return;
+  lastShootTime = now;
+
+  shots.push(new Shot(sx, sy));
+
+  let hit = false;
+  birds.forEach(bird => {
+    const dx = sx - bird.x, dy = sy - bird.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < bird.w * 0.7) {
+      hit = true;
+      // Particles
+      for (let i = 0; i < 14; i++) particles.push(new Particle(bird.x, bird.y, bird.color));
+      for (let i = 0; i < 6; i++) particles.push(new Particle(bird.x, bird.y, '#fff'));
+      // Score
+      combo++;
+      comboTimer = 120;
+      const pts = bird.score * (combo > 1 ? combo : 1);
+      score += pts;
+      showCombo(combo, pts);
+      level = Math.floor(score / 150) + 1;
+      updateHUD();
+      bird.reset();
+    }
+  });
+
+  if (!hit) {
+    combo = 0;
+    document.getElementById('combo-display').style.opacity = '0';
+  }
+}
+
+function showCombo(c, pts) {
+  const el = document.getElementById('combo-display');
+  el.style.opacity = '1';
+  el.textContent = c > 1 ? `${c}x COMBO! +${pts}` : `+${pts}`;
+  setTimeout(() => el.style.opacity = '0', 700);
+}
+
+// ─── Draw crosshair ──────────────────────────────────────────────────────────
+function drawCrosshair(x, y, pinching) {
+  const r = pinching ? 16 : 24;
+  ctx.save();
+  ctx.strokeStyle = pinching ? '#f5a623' : 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = pinching ? 3 : 2;
+  ctx.shadowColor = pinching ? '#f5a623' : 'white';
+  ctx.shadowBlur = pinching ? 15 : 6;
+  // Circle
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.stroke();
+  // Cross lines
+  const gap = r + 6, len = 14;
+  [[x-gap-len, y, x-gap, y],[x+gap, y, x+gap+len, y],
+   [x, y-gap-len, x, y-gap],[x, y+gap, x, y+gap+len]].forEach(([x1,y1,x2,y2]) => {
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  });
+  ctx.restore();
+}
+
+// ─── Main game loop ───────────────────────────────────────────────────────────
+let animId;
+function gameLoop() {
+  if (!gameActive) return;
+  animId = requestAnimationFrame(gameLoop);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawStars();
+
+  // Ground line
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height * 0.78);
+  ctx.lineTo(canvas.width, canvas.height * 0.78);
+  ctx.stroke();
+  ctx.restore();
+
+  // Update & draw
+  birds.forEach(b => { b.update(); b.draw(); });
+  shots = shots.filter(s => s.alpha > 0);
+  shots.forEach(s => { s.update(); s.draw(); });
+  particles = particles.filter(p => p.alpha > 0);
+  particles.forEach(p => { p.update(); p.draw(); });
+
+  // Combo timer
+  if (comboTimer > 0) comboTimer--;
+  else if (combo > 0) { combo = 0; }
+
+  // Hand crosshair
+  if (handX > 0) drawCrosshair(handX, handY, isPinching);
+
+  // Pinch shoot
+  if (isPinching && !wasPinching) shoot(handX, handY);
+  wasPinching = isPinching;
+}
+
+// ─── Start / End / Restart ───────────────────────────────────────────────────
+function startGame() {
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('gameover-screen').style.display = 'none';
+  score = 0; lives = 3; level = 1; combo = 0;
+  birds = []; particles = []; shots = [];
+  gameActive = true;
+  updateHUD();
+  spawnBirds();
+  gameLoop();
+}
+
+function endGame() {
+  gameActive = false;
+  cancelAnimationFrame(animId);
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('final-level-msg').textContent = `You reached Level ${level}`;
+  document.getElementById('gameover-screen').style.display = 'flex';
+}
+
+function restartGame() {
+  startGame();
+}
+
+// ─── MediaPipe Hand Tracking ─────────────────────────────────────────────────
+const videoEl = document.getElementById('camera-feed');
+
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.6
+});
+
+hands.onResults(results => {
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    handX = -100; handY = -100; isPinching = false; return;
+  }
+  const lm = results.multiHandLandmarks[0];
+
+  // Index fingertip = landmark 8, mirrored for display
+  const ix = (1 - lm[8].x) * canvas.width;
+  const iy = lm[8].y * canvas.height;
+  handX = ix; handY = iy;
+
+  // Pinch: distance between thumb tip (4) and index tip (8)
+  const tx = (1 - lm[4].x) * canvas.width;
+  const ty = lm[4].y * canvas.height;
+  const pinchDist = Math.hypot(tx - ix, ty - iy);
+  isPinching = pinchDist < 50;
+});
+
+// Progress bar while loading
+let loadPct = 0;
+const loadInterval = setInterval(() => {
+  loadPct = Math.min(loadPct + Math.random() * 15, 90);
+  document.getElementById('loading-bar').style.width = loadPct + '%';
+}, 300);
+
+const camera = new Camera(videoEl, {
+  onFrame: async () => { await hands.send({image: videoEl}); },
+  width: 640, height: 480
+});
+
+camera.start().then(() => {
+  clearInterval(loadInterval);
+  document.getElementById('loading-bar').style.width = '100%';
+  document.getElementById('status-msg').textContent = '✅ Hand tracking ready!';
+  setTimeout(() => {
+    document.getElementById('start-btn').style.display = 'inline-block';
+    document.getElementById('status-msg').style.display = 'none';
+    document.getElementById('loading-bar-wrap').style.display = 'none';
+  }, 600);
+}).catch(err => {
+  clearInterval(loadInterval);
+  document.getElementById('status-msg').textContent = '❌ Camera error: ' + err.message;
+  console.error(err);
+});
+
+// Also allow mouse/touch for testing without hand tracking
+canvas.addEventListener('mousemove', e => {
+  if (!gameActive) return;
+  handX = e.clientX; handY = e.clientY;
+});
+canvas.addEventListener('click', e => {
+  if (!gameActive) return;
+  shoot(e.clientX, e.clientY);
+});
+</script>
+</body>
+</html>
